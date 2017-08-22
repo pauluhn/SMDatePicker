@@ -14,6 +14,7 @@ import UIKit
     @objc optional func datePickerDidAppear(_ picker: SMDatePicker)
     
     @objc optional func datePicker(_ picker: SMDatePicker, didPickDate date: Date)
+    @objc optional func datePicker(_ picker: SMDatePicker, didPickDate date: Date, score: String)
     @objc optional func datePickerDidCancel(_ picker: SMDatePicker)
     
     @objc optional func datePickerWillDisappear(_ picker: SMDatePicker)
@@ -22,6 +23,22 @@ import UIKit
 }
 
 @objc open class SMDatePicker: UIView {
+    /// Score
+    public typealias Score = (title: String, value: String)
+    open var scores: [Score] {
+        get {
+            return _scores
+        }
+        set {
+            _scores = newValue
+        }
+    }
+    /// UI mode
+    public enum Mode {
+        case `default`
+        case score
+    }
+    open var mode: Mode = .default
     
     /// Picker's delegate that conforms to SMDatePickerDelegate protocol
     open weak var delegate: SMDatePickerDelegate?
@@ -96,6 +113,7 @@ import UIKit
     
     fileprivate var toolbar: UIToolbar = UIToolbar()
     fileprivate var picker: UIDatePicker = UIDatePicker()
+    fileprivate var scorePicker = UIPickerView()
     
     // MARK: Lifecycle
     
@@ -153,6 +171,9 @@ import UIKit
         } else {
             picker.backgroundColor = backgroundColor
         }
+        
+        scorePicker.dataSource = self
+        scorePicker.delegate = self
     }
     
     fileprivate func toolbarItems() -> [UIBarButtonItem] {
@@ -203,6 +224,9 @@ import UIKit
     /// - Parameter view: is a UIView where we want to show our picker
     /// - Parameter animated: will show with animation if it's true
     open func showPickerInView(_ view: UIView, animated: Bool) {
+        if mode == .score {
+            rightButtons.first?.title = "Next"
+        }
         toolbar.items = toolbarItems()
         
         toolbar.frame = CGRect(x: 0, y: 0, width: view.frame.size.width, height: toolbarHeight)
@@ -260,9 +284,21 @@ import UIKit
     
     /// Default Done action for picker. It will hide picker with animation and call's delegate datePicker(:didPickDate) method.
     open func pressedDone(_ sender: AnyObject) {
-        hidePickerAnimation(true)
-        
-        delegate?.datePicker?(self, didPickDate: picker.date)
+        switch mode {
+        case .default:
+            hidePickerAnimation(true)
+            delegate?.datePicker?(self, didPickDate: picker.date)
+        case .score:
+            if picker.isHidden {
+                hidePickerAnimation(true)
+                delegate?.datePicker?(self, didPickDate: picker.date, score: scorePicker.score)
+            } else {
+                picker.isHidden = true
+                scorePicker.frame = picker.frame
+                addSubview(scorePicker)
+                rightButtons.first?.title = "Done"
+            }
+        }
     }
     
     /// Default Cancel actions for picker.
@@ -270,5 +306,25 @@ import UIKit
         hidePickerAnimation(true)
         
         delegate?.datePickerDidCancel?(self)
+    }
+}
+
+extension SMDatePicker: UIPickerViewDataSource, UIPickerViewDelegate {
+    public func numberOfComponents(in pickerView: UIPickerView) -> Int {
+        return 1
+    }
+    public func pickerView(_ pickerView: UIPickerView, numberOfRowsInComponent component: Int) -> Int {
+        return scores.count
+    }
+    public func pickerView(_ pickerView: UIPickerView, titleForRow row: Int, forComponent component: Int) -> String? {
+        return scores[row].title
+    }
+}
+
+fileprivate var _scores: [SMDatePicker.Score] = []
+fileprivate extension UIPickerView {
+    var score: String {
+        guard !_scores.isEmpty else { return "" }
+        return _scores[selectedRow(inComponent: 0)].value
     }
 }
